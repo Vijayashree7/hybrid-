@@ -1,0 +1,143 @@
+/***************** HYBRID GREYWATER TREATMENT SYSTEM - IoT ENABLED ***************
+ * Sends data to Blynk App:
+ * V0 = Turbidity
+ * V1 = pH
+ * V2 = Temperature
+ * V3 = Flow Rate
+ * V4 = Water Level
+ * V5 = Pump Status
+ * V6 = UV Status
+ *******************************************************************************/
+
+#define BLYNK_TEMPLATE_ID "Your_Template_ID"
+#define BLYNK_DEVICE_NAME "GreywaterSystem"
+#define BLYNK_AUTH_TOKEN "Your_Auth_Token"
+
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
+// ---- WiFi ----
+char ssid[] = "YourWiFiName";
+char pass[] = "YourWiFiPassword";
+
+// ---- Sensors ----
+#define turbidityPin A0
+#define pHpin A1
+#define tempPin D2
+#define flowPin D3
+#define waterLevelPin D4
+
+// ---- Relays ----
+#define pumpRelay D5
+#define uvRelay D6
+#define backwashRelay D7
+
+// ---- Variables ----
+volatile int flowCount = 0;
+float flowRate = 0;
+unsigned long lastMillis = 0;
+
+// ---- Thresholds ----
+float pH_min = 6.0;
+float pH_max = 8.5;
+int turbidityLimit = 600;
+float maxTemp = 40;
+
+OneWire oneWire(tempPin);
+DallasTemperature sensors(&oneWire);
+
+// ---- Flow Sensor Interrupt ----
+void ICACHE_RAM_ATTR countFlow() {
+  flowCount++;
+}
+
+void setup() {
+  Serial.begin(9600);
+  sensors.begin();
+
+  pinMode(flowPin, INPUT);
+  pinMode(waterLevelPin, INPUT);
+
+  pinMode(pumpRelay, OUTPUT);
+  pinMode(uvRelay, OUTPUT);
+  pinMode(backwashRelay, OUTPUT);
+
+  attachInterrupt(digitalPinToInterrupt(flowPin), countFlow, RISING);
+
+  digitalWrite(pumpRelay, HIGH);
+  digitalWrite(uvRelay, HIGH);
+  digitalWrite(backwashRelay, HIGH);
+
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+}
+
+void loop() {
+  Blynk.run();
+
+  // ---------- Read Sensors ----------
+  int turbidityValue = analogRead(turbidityPin);
+  int pH_raw = analogRead(pHpin);
+  float pH = (pH_raw * 5.0 / 1023.0) * 3.5;
+
+  sensors.requestTemperatures();
+  float tempC = sensors.getTempCByIndex(0);
+
+  int waterLevel = digitalRead(waterLevelPin);
+
+  // ---------- Flow Calculation ----------
+  if (millis() - lastMillis >= 1000) {
+    lastMillis = millis();
+    flowRate = flowCount / 7.5;  
+    flowCount = 0;
+  }
+
+  // ---------- SEND TO BLYNK APP ----------
+  Blynk.virtualWrite(V0, turbidityValue);
+  Blynk.virtualWrite(V1, pH);
+  Blynk.virtualWrite(V2, tempC);
+  Blynk.virtualWrite(V3, flowRate);
+  Blynk.virtualWrite(V4, waterLevel);
+
+  // ---------- AUTOMATIC LOGIC ----------
+  
+  // Low water level → stop everything
+  if (waterLevel == 0) {
+    digitalWrite(pumpRelay, HIGH);
+    digitalWrite(uvRelay, HIGH);
+    Blynk.virtualWrite(V5, 0);
+    Blynk.virtualWrite(V6, 0);
+    return;
+  }
+
+  // Turn pump ON
+  digitalWrite(pumpRelay, LOW);
+  Blynk.virtualWrite(V5, 1);
+
+  // Turbidity too high → backwash
+  if (turbidityValue > turbidityLimit) {
+    digitalWrite(backwashRelay, LOW);
+    delay(3000);
+    digitalWrite(backwashRelay, HIGH);
+  }
+
+  // pH abnormal → UV OFF
+  if (pH < pH_min || pH > pH_max) {
+    digitalWrite(uvRelay, HIGH);
+    Blynk.virtualWrite(V6, 0);
+  } else {
+    digitalWrite(uvRelay, LOW);
+    Blynk.virtualWrite(V6, 1);
+  }
+
+  // High temperature → stop system
+  if (tempC > maxTemp) {
+    digitalWrite(pumpRelay, HIGH);
+    digitalWrite(uvRelay, HIGH);
+    Blynk.virtualWrite(V5, 0);
+    Blynk.virtualWrite(V6, 0);
+  }
+
+  delay(300);
+}
