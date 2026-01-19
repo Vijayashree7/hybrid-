@@ -1,0 +1,126 @@
+#include<LiquidCrystal.h>
+#define SerialMonitor 0
+unsigned long clocktime;
+LiquidCrystal lcd(12,11,5,4,3,2);
+float value;
+float value2;
+int tmp = A1;
+int humidity = A0;
+int person1 = 7;
+int person2 = 6;
+int person3 = 8;
+int person4 = 9;
+//Initiate Serial Communication 
+void setup(){
+  Serial.begin(9600);
+  pinMode(tmp,INPUT);
+  pinMode(humidity, INPUT);
+  pinMode(person1,OUTPUT);
+  pinMode(person2,OUTPUT);
+  pinMode(person3,OUTPUT);
+  pinMode(person4,OUTPUT);
+  
+}
+
+void loop(){{
+  clocktime=millis();
+	value = analogRead(tmp)*0.004882814;
+  	value = (value - 0.5) * 100.0;
+  	lcd.setCursor(0,1);
+	lcd.print("Tmp:");
+  	lcd.print(value);
+    delay(1000);
+  	lcd.clear();
+     
+
+  value2 = analogRead(humidity);
+  value2 = map(value2, 0, 1023, 0, 100);;
+  lcd.setCursor(0,2);
+  lcd.print("%Humidity:");
+  lcd.print(value2);
+  delay(1000);
+  lcd.clear();
+  
+  //Send value of temp to serial monitor 
+    Serial.print("Temp: ");
+	Serial.print(value);
+    Serial.print(" ");
+  //Send value of humidity to monitor
+  Serial.print("Humidity: ");
+  Serial.print(value2);
+  Serial.print(" ");
+  Serial.read();
+int a=Serial.read();
+  Serial.println(a); 
+  //display time stamp
+  Serial.print("Time stamp (s): ");
+  Serial.println(clocktime/1000,1);
+  
+  
+  if ((value2 >= 60)&&(value >30) && (value<45)) {
+    digitalWrite(person1,HIGH);
+    digitalWrite(person2, HIGH);
+    digitalWrite(person3, HIGH);
+    digitalWrite(person4, HIGH); 
+  }
+    else  {
+    digitalWrite(person1,LOW);
+    digitalWrite(person2, LOW);
+    digitalWrite(person3, LOW);
+    digitalWrite(person4, LOW);
+  }
+ 
+int state1 = digitalRead(person1);
+int state2 = digitalRead(person2);
+int state3 = digitalRead(person3);
+int state4 = digitalRead(person4);
+   //Send state of valve to monitor 
+  if (state1 == HIGH) {
+  Serial.print("Valve1: ON ");
+  }
+  else {
+   Serial.print("Valve_1: OFF ");
+   }
+  if (state2 == HIGH) {
+    Serial.print("Valve_2: ON ");
+  }
+  else {
+    Serial.print("Valve_2: OFF ");
+  }
+  if (state3 == HIGH) {
+    Serial.print("Valve_3: ON ");
+  }
+  else {
+    Serial.print("Valve_3: OFF ");
+  }
+  if (state4 == HIGH) {
+    Serial.print("Valve_4: ON ");
+  }
+  else {
+    Serial.print("Valve_4: OFF ");
+  }
+  
+  if ((value2 < 70)) {
+    Serial.print("Humidity is low ");
+    Serial.read();
+  }
+  if ((value < 35)) {
+      Serial.print("Temperature is low...adjust ");
+    Serial.read();
+
+}
+ if ((value > 43)) {
+      Serial.print("Temperature is high...adjust ");
+    Serial.read();
+}
+}
+           }
+
+
+
+
+
+
+
+
+
